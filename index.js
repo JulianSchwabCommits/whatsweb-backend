@@ -9,7 +9,6 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// Serve static files (HTML, JS)
 app.use(express.static(__dirname));
 
 const socketRooms = new Map();
@@ -51,5 +50,6 @@ io.on('connection', socket => {
     console.log(`User disconnected: ${socket.id}`);
   });
 });
+
 
 server.listen(8080, () => console.log('Server running on http://localhost:8080'));

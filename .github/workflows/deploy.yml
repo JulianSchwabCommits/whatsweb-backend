@@ -53,8 +53,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      # Trigger Azure deployment via webhook
-      - name: Trigger Azure deployment
+      # Trigger Azure Web App to pull new image
+      - name: Deploy to Azure Web App
         run: |
           curl -X POST "${{ secrets.AZURE_WEBAPP_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \

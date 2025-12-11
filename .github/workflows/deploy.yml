@@ -55,8 +55,10 @@ jobs:
 
       # Trigger Azure Web App to pull new image
       - name: Deploy to Azure Web App
+        env:
+          WEBHOOK_URL: ${{ secrets.AZURE_WEBAPP_WEBHOOK_URL }}
         run: |
-          curl -X POST "${{ secrets.AZURE_WEBAPP_WEBHOOK_URL }}" \
+          curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d '{}' \
             --fail --silent --show-error

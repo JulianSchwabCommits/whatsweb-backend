@@ -9,12 +9,21 @@ const io = new Server(server, {
   cors: {
     origin: ["https://whatsweb-frontend.azurewebsites.net"],
     methods: ["GET", "POST"]
+  },
+  allowRequest: (req, callback) => {
+    const origin = req.headers.origin;
+    console.log(origin);
+    if (origin === "https://whatsweb-frontend.azurewebsites.net") {
+      callback(null, true);
+    } else {
+      callback("Origin not allowed", false);
+    }
   }
 });
 
-app.use(express.static(__dirname));
-
-const socketRooms = new Map();
+app.get('/', (req, res) => {
+  res.send('Hello World');
+});
 
 io.on('connection', socket => {
   socketRooms.set(socket.id, new Set());

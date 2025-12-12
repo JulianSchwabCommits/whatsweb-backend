@@ -6,7 +6,10 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: {
+    origin: ["https://whatsweb-frontend.azurewebsites.net"],
+    methods: ["GET", "POST"]
+  }
 });
 
 app.use(express.static(__dirname));
@@ -20,7 +23,7 @@ io.on('connection', socket => {
   socket.on('joinRoom', room => {
     socket.join(room);
     socketRooms.get(socket.id).add(room);
-    io.to(room).emit('message', `${socket.id.substr(0,2)} joined room "${room}"`);
+    io.to(room).emit('message', `${socket.id.substr(0, 2)} joined room "${room}"`);
   });
 
   socket.on('leaveRoom', room => {
@@ -28,20 +31,20 @@ io.on('connection', socket => {
     if (!rooms.has(room)) return socket.emit('message', `You are not in room "${room}"`);
     socket.leave(room);
     rooms.delete(room);
-    io.to(room).emit('message', `${socket.id.substr(0,2)} left room "${room}"`);
+    io.to(room).emit('message', `${socket.id.substr(0, 2)} left room "${room}"`);
     socket.emit('message', `You left room "${room}"`);
   });
 
   socket.on('roomMessage', ({ room, message }) => {
     const rooms = socketRooms.get(socket.id);
     if (!rooms.has(room)) return socket.emit('message', `You are not in room "${room}"!`);
-    io.to(room).emit('message', `[${room}] ${socket.id.substr(0,2)}: ${message}`);
+    io.to(room).emit('message', `[${room}] ${socket.id.substr(0, 2)}: ${message}`);
   });
 
   socket.on('privateMessage', ({ targetId, message }) => {
     const target = io.sockets.sockets.get(targetId);
     if (!target) return socket.emit('message', `Target ${targetId} not found`);
-    target.emit('message', `${socket.id.substr(0,2)} (private): ${message}`);
+    target.emit('message', `${socket.id.substr(0, 2)} (private): ${message}`);
     socket.emit('message', `Message sent to ${targetId}`);
   });
 

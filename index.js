@@ -7,12 +7,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["https://whatsweb-frontend.azurewebsites.net"],
+    origin: "*",
     methods: ["GET", "POST"]
   },
   allowRequest: (req, callback) => {
     const origin = req.headers.origin;
-    console.log(origin);
+    // Allow only if origin is exactly the frontend URL
     if (origin === "https://whatsweb-frontend.azurewebsites.net") {
       callback(null, true);
     } else {
@@ -21,9 +21,22 @@ const io = new Server(server, {
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Hello World');
+// Middleware for Token Authentication
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  // TODO: Move "MySuperSecretToken" to process.env.API_TOKEN in production
+  if (token === "MySuperSecretToken") {
+    next();
+  } else {
+    next(new Error("Authentication error: Invalid Token"));
+  }
 });
+
+app.get('/', (req, res) => {
+  res.send('Its Running');
+});
+
+const socketRooms = new Map();
 
 io.on('connection', socket => {
   socketRooms.set(socket.id, new Set());

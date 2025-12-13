@@ -1,4 +1,3 @@
-// index.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -22,7 +21,10 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", (room) => {
     socket.join(room);
-    io.to(room).emit("message", `${socket.id.slice(0, 2)} joined ${room}`);
+    io.to(room).emit(
+      "message",
+      `${socket.id.slice(0, 2)} joined ${room}`
+    );
   });
 
   socket.on("leaveRoom", (room) => {
@@ -34,6 +36,13 @@ io.on("connection", (socket) => {
     io.to(room).emit(
       "message",
       `[${room}] ${socket.id.slice(0, 2)}: ${message}`
+    );
+  });
+
+  socket.on("directMessage", ({ targetId, message }) => {
+    io.to(targetId).emit(
+      "directMessage",
+      `[DM from ${socket.id.slice(0, 2)}]: ${message}`
     );
   });
 

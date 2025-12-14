@@ -1,0 +1,44 @@
+# Node modules
+/node_modules
+
+# Build output
+/dist
+/build
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+.temp
+.tmp
+pids
+*.pid
+*.pid.lock
+
+# Coverage
+/coverage
+/.nyc_output
+
+# IDEs
+/.idea
+.project
+.classpath
+*.launch
+.settings/
+/.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

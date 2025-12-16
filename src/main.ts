@@ -8,13 +8,11 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  // Enable CORS for REST endpoints
   app.enableCors({
     origin: configService.allowedOrigins,
     methods: ['GET', 'POST'],
   });
 
-  // Enable graceful shutdown hooks
   app.enableShutdownHooks();
 
   const port = configService.port;

@@ -35,4 +35,20 @@ export class ConfigService {
         const host = this.websiteHostname ?? `localhost:${this.port}`;
         return `${protocol}://${host}`;
     }
+
+    get supabaseUrl(): string {
+        return this.configService.get<string>('SUPABASE_URL') ?? '';
+    }
+
+    get supabaseAnonKey(): string {
+        return this.configService.get<string>('SUPABASE_ANON_KEY') ?? '';
+    }
+
+    get jwtSecret(): string {
+        return this.configService.get<string>('JWT_SECRET') ?? '';
+    }
+
+    get jwtExpiration(): string {
+        return this.configService.get<string>('JWT_EXPIRATION') ?? '1h';
+    }
 }

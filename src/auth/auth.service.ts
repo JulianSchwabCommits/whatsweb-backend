@@ -5,7 +5,6 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { UserService } from '../user/user.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -17,7 +16,7 @@ export class AuthService {
         private configService: ConfigService,
     ) { }
 
-    async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
+    async register(registerDto: RegisterDto): Promise<{ accessToken: string; refreshToken: string; user: { id: string; email: string; username: string; fullName: string } }> {
         const { email, password, username, fullName } = registerDto;
 
         // Check if username is already taken
@@ -66,7 +65,7 @@ export class AuthService {
         };
     }
 
-    async login(loginDto: LoginDto): Promise<AuthResponseDto> {
+    async login(loginDto: LoginDto): Promise<{ accessToken: string; refreshToken: string; user: { id: string; email: string; username: string; fullName: string } }> {
         const { email, password } = loginDto;
 
         // Sign in with Supabase Auth

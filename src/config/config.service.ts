@@ -37,18 +37,34 @@ export class ConfigService {
     }
 
     get supabaseUrl(): string {
-        return this.configService.get<string>('SUPABASE_URL') ?? '';
+        const url = this.configService.get<string>('SUPABASE_URL');
+        if (!url) {
+            throw new Error('SUPABASE_URL environment variable must be configured');
+        }
+        return url;
     }
 
     get supabaseAnonKey(): string {
-        return this.configService.get<string>('SUPABASE_ANON_KEY') ?? '';
+        const key = this.configService.get<string>('SUPABASE_ANON_KEY');
+        if (!key) {
+            throw new Error('SUPABASE_ANON_KEY environment variable must be configured');
+        }
+        return key;
     }
 
     get jwtSecret(): string {
-        return this.configService.get<string>('JWT_SECRET') ?? '';
+        const secret = this.configService.get<string>('JWT_SECRET');
+        if (!secret) {
+            throw new Error('JWT_SECRET environment variable must be configured');
+        }
+        return secret;
     }
 
     get jwtExpiration(): string {
-        return this.configService.get<string>('JWT_EXPIRATION') ?? '1h';
+        const expiresIn = this.configService.get<string>('JWT_EXPIRATION');
+        if (!expiresIn) {
+            throw new Error('JWT_EXPIRATION environment variable must be configured');
+        }
+        return expiresIn;
     }
 }

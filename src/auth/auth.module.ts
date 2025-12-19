@@ -17,8 +17,11 @@ import { SupabaseModule } from '../supabase/supabase.module';
             imports: [ConfigModule],
             inject: [ConfigService],
             useFactory: (configService: ConfigService): JwtModuleOptions => {
-                const secret = configService.get<string>('JWT_SECRET') || 'fallback-secret';
-                const expiresIn = configService.get<string>('JWT_EXPIRATION') || '1h';
+                const secret = configService.get<string>('JWT_SECRET');
+                if (!secret) throw new Error('JWT_SECRET must be configured');
+
+                const expiresIn = configService.get<string>('JWT_EXPIRATION');
+                if (!expiresIn) throw new Error('JWT_EXPIRATION must be configured');
                 return {
                     secret,
                     signOptions: {

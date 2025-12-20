@@ -1,6 +1,5 @@
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
 import { UserService } from '../user/user.service';
 import { RegisterDto } from './dto/register.dto';
@@ -13,7 +12,6 @@ export class AuthService {
         private supabaseService: SupabaseService,
         private userService: UserService,
         private jwtService: JwtService,
-        private configService: ConfigService,
     ) { }
 
     async register(registerDto: RegisterDto): Promise<{ accessToken: string; refreshToken: string; user: { id: string; email: string; username: string; fullName: string } }> {
@@ -129,25 +127,18 @@ export class AuthService {
         };
     }
 
-    async logout(userId: string): Promise<void> {
+    async logout(): Promise<void> {
         await this.supabaseService.auth.signOut();
     }
 
-    async validateUser(userId: string) {
-        return await this.userService.findById(userId);
+    validateUser(userId: string) {
+        return this.userService.findById(userId);
     }
 
-    private async generateTokens(payload: JwtPayload): Promise<{ accessToken: string; refreshToken: string }> {
-        const accessToken = this.jwtService.sign(payload);
-        
-        // Generate a refresh token with longer expiration
-        const refreshToken = this.jwtService.sign(payload, {
-            expiresIn: '7d',
-        });
-
+    private generateTokens(payload: JwtPayload): { accessToken: string; refreshToken: string } {
         return {
-            accessToken,
-            refreshToken,
+            accessToken: this.jwtService.sign(payload),
+            refreshToken: this.jwtService.sign(payload, { expiresIn: '7d' }),
         };
     }
 }

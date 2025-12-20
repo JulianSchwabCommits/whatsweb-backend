@@ -11,286 +11,153 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '../config/config.service';
+import { MaxLength, MinLength } from 'class-validator';
 import { UserService } from '../user/user.service';
-import { RoomMessageDto, PrivateMessageDto, JoinRoomDto } from './chat-gateway.dto';
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface AuthenticatedSocket extends Socket {
-    user: {
-        id: string;
-        email: string;
-        username: string;
-    };
+    user: { id: string; email: string; username: string };
 }
 
+interface JwtPayload {
+    sub: string;
+    email: string;
+    username: string;
+}
+
+// ─── DTOs ────────────────────────────────────────────────────────────────────
+class JoinRoomDto {
+    @MinLength(1) @MaxLength(100)
+    room: string;
+}
+
+class RoomMessageDto extends JoinRoomDto {
+    @MinLength(1) @MaxLength(2000)
+    message: string;
+}
+
+class PrivateMessageDto {
+    @MinLength(1)
+    targetId: string;
+
+    @MinLength(1) @MaxLength(2000)
+    message: string;
+}
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+const extractToken = (client: Socket): string | null =>
+    client.handshake.auth?.token ||
+    (client.handshake.headers?.authorization?.startsWith('Bearer ')
+        ? client.handshake.headers.authorization.substring(7)
+        : null);
+
+const sanitize = (s: string): string =>
+    s?.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#x27;').trim() || '';
+
+// ─── Gateway ─────────────────────────────────────────────────────────────────
 @WebSocketGateway({
     cors: {
-        origin: (origin, callback) => {
-            // Allow requests with no origin (like mobile apps or curl)
-            if (!origin) {
-                callback(null, true);
-                return;
-            }
-            // Allow localhost:3000 for development
-            if (origin === 'http://localhost:3000' || origin.includes('azurewebsites.net')) {
-                callback(null, true);
-            } else {
-                callback(new Error('Origin not allowed'), false);
-            }
+        origin: (origin: string, cb: (err: Error | null, allow?: boolean) => void) => {
+            cb(!origin || origin === 'http://localhost:3000' || origin.includes('azurewebsites.net') ? null : new Error('Origin not allowed'), true);
         },
         methods: ['GET', 'POST'],
     },
 })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-    @WebSocketServer()
-    server: Server;
-
+    @WebSocketServer() server: Server;
     private readonly logger = new Logger(ChatGateway.name);
-    private readonly socketRooms = new Map<string, Set<string>>();
-    private readonly authenticatedUsers = new Map<string, { id: string; username: string }>();
+    private readonly rooms = new Map<string, Set<string>>();
+    private readonly users = new Map<string, { id: string; username: string }>();
 
-    constructor(
-        private readonly configService: ConfigService,
-        private readonly jwtService: JwtService,
-        private readonly userService: UserService,
-    ) { }
+    constructor(private readonly jwt: JwtService, private readonly userService: UserService) {}
 
     async handleConnection(client: Socket): Promise<void> {
         try {
-            // Extract JWT token from handshake
-            const token = this.extractToken(client);
+            const token = extractToken(client);
+            if (!token) return this.reject(client, 'Authentication required');
 
-            if (!token) {
-                this.logger.warn(`Connection rejected: No token provided (${client.id})`);
-                client.emit('error', { message: 'Authentication required' });
-                client.disconnect();
-                return;
-            }
+            const payload = await this.jwt.verifyAsync<JwtPayload>(token).catch(() => null);
+            if (!payload) return this.reject(client, 'Invalid or expired token');
 
-            // Verify JWT token
-            const payload = await this.verifyToken(token);
-
-            if (!payload) {
-                this.logger.warn(`Connection rejected: Invalid token (${client.id})`);
-                client.emit('error', { message: 'Invalid or expired token' });
-                client.disconnect();
-                return;
-            }
-
-            // Verify user exists in database
             const user = await this.userService.findById(payload.sub);
+            if (!user) return this.reject(client, 'User not found');
 
-            if (!user) {
-                this.logger.warn(`Connection rejected: User not found (${client.id})`);
-                client.emit('error', { message: 'User not found' });
-                client.disconnect();
-                return;
-            }
+            (client as AuthenticatedSocket).user = { id: user.id, email: user.email, username: user.username };
+            this.rooms.set(client.id, new Set());
+            this.users.set(client.id, { id: user.id, username: user.username });
 
-            // Store authenticated user info
-            (client as AuthenticatedSocket).user = {
-                id: user.id,
-                email: user.email,
-                username: user.username,
-            };
-
-            this.socketRooms.set(client.id, new Set());
-            this.authenticatedUsers.set(client.id, { id: user.id, username: user.username });
-
-            this.logger.log(`User connected: ${user.username} (${client.id})`);
+            this.logger.log(`Connected: ${user.username} (${client.id})`);
             client.emit('authenticated', { message: 'Successfully authenticated', userId: user.id });
-
-        } catch (error) {
-            this.logger.error(`Connection error: ${error.message}`);
-            client.emit('error', { message: 'Authentication failed' });
-            client.disconnect();
+        } catch {
+            this.reject(client, 'Authentication failed');
         }
     }
 
     handleDisconnect(client: Socket): void {
-        const userInfo = this.authenticatedUsers.get(client.id);
-        this.socketRooms.delete(client.id);
-        this.authenticatedUsers.delete(client.id);
-        this.logger.log(`User disconnected: ${userInfo?.username || 'unknown'} (${client.id})`);
+        const user = this.users.get(client.id);
+        this.rooms.delete(client.id);
+        this.users.delete(client.id);
+        this.logger.log(`Disconnected: ${user?.username || 'unknown'} (${client.id})`);
     }
 
     @SubscribeMessage('joinRoom')
-    handleJoinRoom(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() payload: JoinRoomDto,
-    ): void {
-        if (!this.isAuthenticated(client)) {
-            throw new WsException('Not authenticated');
-        }
-
-        const room = this.sanitizeInput(payload.room);
-        client.join(room);
-        this.socketRooms.get(client.id)?.add(room);
-
-        this.server
-            .to(room)
-            .emit('message', {
-                type: 'system',
-                content: `${client.user.username} joined room "${room}"`,
-                timestamp: new Date().toISOString(),
-            });
+    joinRoom(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { room }: JoinRoomDto): void {
+        this.auth(client);
+        const r = sanitize(room);
+        client.join(r);
+        this.rooms.get(client.id)?.add(r);
+        this.system(r, `${client.user.username} joined room "${r}"`);
     }
 
     @SubscribeMessage('leaveRoom')
-    handleLeaveRoom(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() payload: JoinRoomDto,
-    ): void {
-        if (!this.isAuthenticated(client)) {
-            throw new WsException('Not authenticated');
-        }
+    leaveRoom(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { room }: JoinRoomDto): void {
+        this.auth(client);
+        const r = sanitize(room);
+        const set = this.rooms.get(client.id);
+        if (!set?.has(r)) return void client.emit('error', { message: `You are not in room "${r}"` });
 
-        const rooms = this.socketRooms.get(client.id);
-        const room = this.sanitizeInput(payload.room);
-
-        if (!rooms?.has(room)) {
-            client.emit('error', { message: `You are not in room "${room}"` });
-            return;
-        }
-
-        client.leave(room);
-        rooms.delete(room);
-
-        this.server
-            .to(room)
-            .emit('message', {
-                type: 'system',
-                content: `${client.user.username} left room "${room}"`,
-                timestamp: new Date().toISOString(),
-            });
-
-        client.emit('message', {
-            type: 'system',
-            content: `You left room "${room}"`,
-            timestamp: new Date().toISOString(),
-        });
+        client.leave(r);
+        set.delete(r);
+        this.system(r, `${client.user.username} left room "${r}"`);
+        client.emit('message', { type: 'system', content: `You left room "${r}"`, timestamp: new Date().toISOString() });
     }
 
     @SubscribeMessage('roomMessage')
-    handleRoomMessage(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() payload: RoomMessageDto,
-    ): void {
-        if (!this.isAuthenticated(client)) {
-            throw new WsException('Not authenticated');
-        }
+    roomMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { room, message }: RoomMessageDto): void {
+        this.auth(client);
+        const r = sanitize(room);
+        if (!this.rooms.get(client.id)?.has(r)) return void client.emit('error', { message: `You are not in room "${r}"!` });
 
-        const rooms = this.socketRooms.get(client.id);
-        const room = this.sanitizeInput(payload.room);
-
-        if (!rooms?.has(room)) {
-            client.emit('error', { message: `You are not in room "${room}"!` });
-            return;
-        }
-
-        const sanitizedMessage = this.sanitizeInput(payload.message);
-
-        this.server
-            .to(room)
-            .emit('message', {
-                type: 'room',
-                room: room,
-                sender: client.user.username,
-                senderId: client.user.id,
-                content: sanitizedMessage,
-                timestamp: new Date().toISOString(),
-            });
+        this.server.to(r).emit('message', {
+            type: 'room', room: r, sender: client.user.username, senderId: client.user.id,
+            content: sanitize(message), timestamp: new Date().toISOString(),
+        });
     }
 
     @SubscribeMessage('privateMessage')
-    handlePrivateMessage(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() payload: PrivateMessageDto,
-    ): void {
-        if (!this.isAuthenticated(client)) {
-            throw new WsException('Not authenticated');
-        }
+    privateMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetId, message }: PrivateMessageDto): void {
+        this.auth(client);
+        const target = this.server.sockets.sockets.get(targetId);
+        if (!target) return void client.emit('error', { message: 'Target user not found or offline' });
 
-        const target = this.server.sockets.sockets.get(payload.targetId);
-
-        if (!target) {
-            client.emit('error', { message: `Target user not found or offline` });
-            return;
-        }
-
-        const sanitizedMessage = this.sanitizeInput(payload.message);
-
-        target.emit('message', {
-            type: 'private',
-            sender: client.user.username,
-            senderId: client.user.id,
-            content: sanitizedMessage,
-            timestamp: new Date().toISOString(),
-        });
-
-        client.emit('message', {
-            type: 'private-sent',
-            targetId: payload.targetId,
-            content: sanitizedMessage,
-            timestamp: new Date().toISOString(),
-        });
+        const content = sanitize(message), ts = new Date().toISOString();
+        target.emit('message', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
+        client.emit('message', { type: 'private-sent', targetId, content, timestamp: ts });
     }
 
-    /**
-     * Extract JWT token from socket handshake
-     */
-    private extractToken(client: Socket): string | null {
-        // Try auth object first (recommended for socket.io)
-        const authToken = client.handshake.auth?.token;
-        if (authToken) {
-            return authToken;
-        }
-
-        // Fallback to Authorization header
-        const authHeader = client.handshake.headers?.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            return authHeader.substring(7);
-        }
-
-        return null;
+    private reject(client: Socket, msg: string): void {
+        this.logger.warn(`Rejected: ${msg} (${client.id})`);
+        client.emit('error', { message: msg });
+        client.disconnect();
     }
 
-    /**
-     * Verify JWT token and return payload
-     */
-    private async verifyToken(token: string): Promise<{ sub: string; email: string; username: string } | null> {
-        try {
-            const payload = await this.jwtService.verifyAsync(token);
-            return payload;
-        } catch (error) {
-            this.logger.debug(`Token verification failed: ${error.message}`);
-            return null;
-        }
+    private auth(client: AuthenticatedSocket): void {
+        if (!client.user?.id) throw new WsException('Not authenticated');
     }
 
-    /**
-     * Check if client is authenticated
-     */
-    private isAuthenticated(client: AuthenticatedSocket): boolean {
-        return !!client.user?.id;
-    }
-
-    /**
-     * Sanitize user input to prevent XSS
-     */
-    private sanitizeInput(input: string): string {
-        if (!input || typeof input !== 'string') {
-            return '';
-        }
-
-        // Basic HTML entity encoding to prevent XSS
-        return input
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#x27;')
-            .trim();
+    private system(room: string, content: string): void {
+        this.server.to(room).emit('message', { type: 'system', content, timestamp: new Date().toISOString() });
     }
 }

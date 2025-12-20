@@ -10,8 +10,8 @@ import { UserModule } from '../user/user.module';
         JwtModule.registerAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
-            useFactory: (configService: ConfigService) => {
-                const secret = configService.get<string>('JWT_SECRET');
+            useFactory: (cfg: ConfigService) => {
+                const secret = cfg.get<string>('JWT_SECRET');
                 if (!secret) throw new Error('JWT_SECRET must be configured');
                 return { secret };
             },
@@ -20,4 +20,4 @@ import { UserModule } from '../user/user.module';
     providers: [ChatGateway],
     exports: [ChatGateway],
 })
-export class ChatGatewayModule { }
+export class ChatGatewayModule {}

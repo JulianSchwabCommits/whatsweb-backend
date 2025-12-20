@@ -72,19 +72,16 @@ export class AuthController {
             throw new UnauthorizedException('Refresh token not found');
         }
         
-        const result = await this.authService.refreshToken(refreshToken);
-        
-        return { accessToken: result.accessToken };
+        return this.authService.refreshToken(refreshToken);
     }
 
     @Post('logout')
     @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
     async logout(
-        @CurrentUser('id') userId: string,
         @Res({ passthrough: true }) res: Response,
     ): Promise<{ message: string }> {
-        await this.authService.logout(userId);
+        await this.authService.logout();
         
         this.clearRefreshTokenCookie(res);
         
@@ -94,7 +91,6 @@ export class AuthController {
     @Get('me')
     @UseGuards(JwtAuthGuard)
     async getProfile(@CurrentUser() user: any) {
-        const userProfile = await this.authService.validateUser(user.id);
-        return userProfile;
+        return this.authService.validateUser(user.id);
     }
 }

@@ -24,10 +24,8 @@ import { SupabaseModule } from '../supabase/supabase.module';
                 if (!expiresIn) throw new Error('JWT_EXPIRATION must be configured');
                 return {
                     secret,
-                    signOptions: {
-                        expiresIn,
-                    },
-                } as JwtModuleOptions;
+                    signOptions: { expiresIn: expiresIn as any },
+                };
             },
         }),
     ],

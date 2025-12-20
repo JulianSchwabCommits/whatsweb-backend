@@ -6,35 +6,15 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-  const logger = new Logger('Bootstrap');
+  const config = app.get(ConfigService);
 
-  // Enable cookie parsing
   app.use(cookieParser());
-
-  // Enable validation globally
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
-  // Enable CORS for REST endpoints
-  app.enableCors({
-    origin: configService.allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    credentials: true,
-  });
-
-  // Enable graceful shutdown hooks
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.enableCors({ origin: config.allowedOrigins, methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], credentials: true });
   app.enableShutdownHooks();
 
-  const port = configService.port;
-  await app.listen(port);
-
-  logger.log(`Server running on ${configService.serverUrl}`);
+  await app.listen(config.port);
+  new Logger('Bootstrap').log(`Server running on ${config.serverUrl}`);
 }
 
 bootstrap();

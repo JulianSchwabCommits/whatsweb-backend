@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { SupabaseService } from '../supabase/supabase.service';
 import { UserService } from '../user/user.service';
@@ -8,6 +8,8 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
+
     constructor(
         private supabaseService: SupabaseService,
         private userService: UserService,
@@ -52,6 +54,8 @@ export class AuthService {
             username: user.username,
         });
 
+        this.logger.log(`User registered: ${user.username} (${user.email})`);
+
         return {
             ...tokens,
             user: {
@@ -89,6 +93,8 @@ export class AuthService {
             email: user.email,
             username: user.username,
         });
+
+        this.logger.log(`User logged in: ${user.username} (${user.email})`);
 
         return {
             ...tokens,

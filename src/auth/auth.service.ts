@@ -108,28 +108,34 @@ export class AuthService {
     }
 
     async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
-        const { data, error } = await this.supabaseService.auth.refreshSession({
-            refresh_token: refreshToken,
-        });
-
-        if (error || !data.user) {
-            throw new UnauthorizedException('Invalid refresh token');
+        // 1. Validate the refresh token JWT
+        let payload: JwtPayload;
+        try {
+            payload = this.jwtService.verify<JwtPayload>(refreshToken);
+        } catch (error) {
+            this.logger.warn('Invalid refresh token attempted');
+            throw new UnauthorizedException('Invalid or expired refresh token');
         }
 
-        const user = await this.userService.findById(data.user.id);
+        // 2. Check that the user still exists in the database
+        const user = await this.userService.findById(payload.sub);
         
         if (!user) {
+            this.logger.warn(`Refresh token used for non-existent user: ${payload.sub}`);
             throw new UnauthorizedException('User not found');
         }
 
-        const payload: JwtPayload = {
+        // 3. Generate new access token
+        const newPayload: JwtPayload = {
             sub: user.id,
             email: user.email,
             username: user.username,
         };
 
+        this.logger.debug(`Token refreshed for user: ${user.username}`);
+
         return {
-            accessToken: this.jwtService.sign(payload),
+            accessToken: this.jwtService.sign(newPayload),
         };
     }
 

@@ -19,8 +19,8 @@ export class AuthController {
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: this.configService.isProduction,
-            sameSite: 'lax',
-            path: '/auth/',
+            sameSite: this.configService.isProduction ? 'none' : 'lax',
+            path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
     }
@@ -29,8 +29,8 @@ export class AuthController {
         res.clearCookie('refreshToken', {
             httpOnly: true,
             secure: this.configService.isProduction,
-            sameSite: 'lax',
-            path: '/auth/',
+            sameSite: this.configService.isProduction ? 'none' : 'lax',
+            path: '/',
         });
     }
 

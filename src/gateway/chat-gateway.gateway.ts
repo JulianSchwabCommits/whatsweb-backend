@@ -44,6 +44,14 @@ class PrivateMessageDto {
     message: string;
 }
 
+class DirectMessageDto {
+    @MinLength(1)
+    targetId: string;
+
+    @MinLength(1) @MaxLength(5000)
+    message: string;
+}
+
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const extractToken = (client: Socket): string | null =>
     client.handshake.auth?.token ||
@@ -62,9 +70,9 @@ const sanitize = (s: string): string =>
             cb(!origin || origin === 'http://localhost:3000' || origin.includes('azurewebsites.net') ? null : new Error('Origin not allowed'), true);
         },
         methods: ['GET', 'POST'],
+        credentials: true,
     },
 })
-@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private readonly logger = new Logger(ChatGateway.name);
@@ -145,6 +153,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const content = sanitize(message), ts = new Date().toISOString();
         target.emit('message', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
         client.emit('message', { type: 'private-sent', targetId, content, timestamp: ts });
+    }
+
+    @SubscribeMessage('directMessage')
+    handleDirectMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() data: { targetId: string; message: string }): void {
+        console.log('[DM] Received from:', client.id, 'to:', data.targetId, 'message:', data.message);
+        
+        const payload = {
+            content: data.message,
+            from: client.id,
+            timestamp: new Date().toISOString(),
+        };
+        
+        // Send to the target user
+        this.server.to(data.targetId).emit('directMessage', payload);
+        
+        // Echo back to sender
+        client.emit('directMessage', payload);
+        
+        console.log('[DM] Sent to:', data.targetId);
     }
 
     private reject(client: Socket, msg: string): void {

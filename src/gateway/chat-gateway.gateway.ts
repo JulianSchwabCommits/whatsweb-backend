@@ -36,7 +36,7 @@ class RoomMessageDto extends JoinRoomDto {
     message: string;
 }
 
-class PrivateMessageDto {
+class DirectMessageDto {
     @MinLength(1)
     targetId: string;
 
@@ -136,8 +136,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
     }
 
-    @SubscribeMessage('privateMessage')
-    privateMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetId, message }: PrivateMessageDto): void {
+    @SubscribeMessage('DirectMessage')
+    DirectMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetId, message }: DirectMessageDto): void {
         this.auth(client);
         const target = this.server.sockets.sockets.get(targetId);
         if (!target) return void client.emit('error', { message: 'Target user not found or offline' });

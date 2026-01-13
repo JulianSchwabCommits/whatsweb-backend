@@ -36,9 +36,9 @@ class RoomMessageDto extends JoinRoomDto {
     message: string;
 }
 
-class PrivateMessageDto {
-    @MinLength(1)
-    targetId: string;
+class DirectMessageDto {
+    @MinLength(1) @MaxLength(50)
+    targetUsername: string;
 
     @MinLength(1) @MaxLength(2000)
     message: string;
@@ -144,15 +144,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
     }
 
-    @SubscribeMessage('privateMessage')
-    privateMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetId, message }: PrivateMessageDto): void {
+    @SubscribeMessage('directMessage')
+    async directMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetUsername, message }: DirectMessageDto): Promise<void> {
         this.auth(client);
-        const target = this.server.sockets.sockets.get(targetId);
-        if (!target) return void client.emit('error', { message: 'Target user not found or offline' });
+        
+        const username = sanitize(targetUsername);
+        
+        // First check if user exists in database
+        const targetUser = await this.userService.findByUsername(username);
+        if (!targetUser) {
+            return void client.emit('error', { message: `User '${username}' does not exist`, code: 'USER_NOT_FOUND' });
+        }
+        
+        // Then check if user is online
+        let targetSocket: Socket | null = null;
+        for (const [socketId, userData] of this.users.entries()) {
+            if (userData.username === username) {
+                targetSocket = this.server.sockets.sockets.get(socketId) || null;
+                break;
+            }
+        }
+        
+        if (!targetSocket) {
+            return void client.emit('error', { message: `User '${username}' is not online`, code: 'USER_OFFLINE' });
+        }
 
         const content = sanitize(message), ts = new Date().toISOString();
-        target.emit('message', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
-        client.emit('message', { type: 'private-sent', targetId, content, timestamp: ts });
+        targetSocket.emit('directMessage', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
+        client.emit('directMessage', { type: 'private-sent', targetUsername: username, content, timestamp: ts });
     }
 
     @SubscribeMessage('directMessage')

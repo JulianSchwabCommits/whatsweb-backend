@@ -62,9 +62,9 @@ const sanitize = (s: string): string =>
             cb(!origin || origin === 'http://localhost:3000' || origin.includes('azurewebsites.net') ? null : new Error('Origin not allowed'), true);
         },
         methods: ['GET', 'POST'],
+        credentials: true,
     },
 })
-@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private readonly logger = new Logger(ChatGateway.name);

@@ -55,6 +55,8 @@ const sanitize = (s: string): string =>
     s?.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#x27;').trim() || '';
 
+const normalizeName = (s: string): string => s?.trim() || '';
+
 // ─── Gateway ─────────────────────────────────────────────────────────────────
 @WebSocketGateway({
     cors: {
@@ -70,6 +72,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly logger = new Logger(ChatGateway.name);
     private readonly rooms = new Map<string, Set<string>>();
     private readonly users = new Map<string, { id: string; username: string }>();
+    private readonly socketsByUserId = new Map<string, Set<string>>();
 
     constructor(private readonly jwt: JwtService, private readonly userService: UserService) {}
 
@@ -86,7 +89,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             (client as AuthenticatedSocket).user = { id: user.id, email: user.email, username: user.username };
             this.rooms.set(client.id, new Set());
-            this.users.set(client.id, { id: user.id, username: user.username });
+            const userInfo = { id: user.id, username: user.username };
+            this.users.set(client.id, userInfo);
+            this.addUserSocket(userInfo.id, client.id);
 
             this.logger.log(`Connected: ${user.username} (${client.id})`);
             client.emit('authenticated', { message: 'Successfully authenticated', userId: user.id });
@@ -99,6 +104,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const user = this.users.get(client.id);
         this.rooms.delete(client.id);
         this.users.delete(client.id);
+        if (user) this.removeUserSocket(user.id, client.id);
         this.logger.log(`Disconnected: ${user?.username || 'unknown'} (${client.id})`);
     }
 
@@ -140,7 +146,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     async directMessage(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() { targetUsername, message }: DirectMessageDto): Promise<void> {
         this.auth(client);
         
-        const username = sanitize(targetUsername);
+        const username = normalizeName(targetUsername);
         
         // First check if user exists in database
         const targetUser = await this.userService.findByUsername(username);
@@ -149,20 +155,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
         
         // Then check if user is online
-        let targetSocket: Socket | null = null;
-        for (const [socketId, userData] of this.users.entries()) {
-            if (userData.username === username) {
-                targetSocket = this.server.sockets.sockets.get(socketId) || null;
-                break;
-            }
-        }
-        
-        if (!targetSocket) {
+        const socketIds = this.socketsByUserId.get(targetUser.id);
+        if (!socketIds || socketIds.size === 0) {
             return void client.emit('error', { message: `User '${username}' is not online`, code: 'USER_OFFLINE' });
         }
 
         const content = sanitize(message), ts = new Date().toISOString();
-        targetSocket.emit('directMessage', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
+        for (const socketId of socketIds) {
+            const targetSocket = this.server.sockets.sockets.get(socketId);
+            if (targetSocket) {
+                targetSocket.emit('directMessage', { type: 'private', sender: client.user.username, senderId: client.user.id, content, timestamp: ts });
+            }
+        }
         client.emit('directMessage', { type: 'private-sent', targetUsername: username, content, timestamp: ts });
     }
 
@@ -178,5 +182,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     private system(room: string, content: string): void {
         this.server.to(room).emit('message', { type: 'system', content, timestamp: new Date().toISOString() });
+    }
+
+    private addUserSocket(userId: string, socketId: string): void {
+        const set = this.socketsByUserId.get(userId) || new Set<string>();
+        set.add(socketId);
+        this.socketsByUserId.set(userId, set);
+    }
+
+    private removeUserSocket(userId: string, socketId: string): void {
+        const set = this.socketsByUserId.get(userId);
+        if (!set) return;
+        set.delete(socketId);
+        if (set.size === 0) this.socketsByUserId.delete(userId);
     }
 }

@@ -148,18 +148,29 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         
         const username = normalizeName(targetUsername);
         
-        // First check if user exists in database
-        const targetUser = await this.userService.findByUsername(username);
-        if (!targetUser) {
-            return void client.emit('error', { message: `User '${username}' does not exist`, code: 'USER_NOT_FOUND' });
+        // Debug: Log online users
+        const uniqueOnlineUsernames = [...new Set(Array.from(this.users.values()).map(u => u.username))];
+        const totalSockets = Array.from(this.users.values()).length;
+        this.logger.debug(`Direct message attempt from '${client.user.username}' to '${username}'`);
+        this.logger.debug(`Online users (${uniqueOnlineUsernames.length} unique, ${totalSockets} total sockets): ${uniqueOnlineUsernames.join(', ')}`);
+        
+        // Find target user by username in online users
+        const targetUserEntry = Array.from(this.users.entries()).find(([_, user]) => user.username === username);
+        
+        if (!targetUserEntry) {
+            this.logger.debug(`User '${username}' is not online - sending USER_OFFLINE error`);
+            return void client.emit('error', { message: `User '${username}' is not online`, code: 'USER_OFFLINE' });
         }
         
-        // Then check if user is online
-        const socketIds = this.socketsByUserId.get(targetUser.id);
+        const [_, targetUserInfo] = targetUserEntry;
+        const socketIds = this.socketsByUserId.get(targetUserInfo.id);
+        
         if (!socketIds || socketIds.size === 0) {
+            this.logger.debug(`User '${username}' has no active sockets - sending USER_OFFLINE error`);
             return void client.emit('error', { message: `User '${username}' is not online`, code: 'USER_OFFLINE' });
         }
 
+        this.logger.debug(`User '${username}' is online with ${socketIds.size} socket(s) - delivering message`);
         const content = sanitize(message), ts = new Date().toISOString();
         for (const socketId of socketIds) {
             const targetSocket = this.server.sockets.sockets.get(socketId);

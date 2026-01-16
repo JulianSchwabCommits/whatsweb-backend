@@ -65,7 +65,7 @@ export class UserService {
             .from('users')
             .select('*')
             .eq('username', username)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             return null;

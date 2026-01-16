@@ -31,6 +31,6 @@ import { SupabaseModule } from '../supabase/supabase.module';
     ],
     controllers: [AuthController],
     providers: [AuthService, JwtStrategy],
-    exports: [AuthService, JwtStrategy, PassportModule],
+    exports: [AuthService, PassportModule],
 })
 export class AuthModule { }

@@ -3,29 +3,36 @@ import { ConfigService as NestConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ConfigService {
-    constructor(private configService: NestConfigService) { }
+  constructor(
+    private readonly config: NestConfigService,
+  ) {}
 
-    get port(): number {
-        return this.configService.get<number>('PORT') ?? 8080;
-    }
+  get port(): number {
+    return this.config.get<number>('PORT') ?? 8080;
+  }
 
-    get allowedOrigins(): string[] {
-        const origins = this.configService.get<string>('ALLOWED_ORIGINS');
-        if (!origins) return ['http://localhost:3000'];
-        return [...new Set([...origins.split(',').map(o => o.trim()), 'http://localhost:3000'])];
-    }
+  get websiteHostname(): string | undefined {
+    return this.config.get<string>('WEBSITE_HOSTNAME');
+  }
 
-    get websiteHostname(): string | undefined {
-        return this.configService.get<string>('WEBSITE_HOSTNAME');
-    }
+  get isProduction(): boolean {
+    return Boolean(this.websiteHostname);
+  }
 
-    get isProduction(): boolean {
-        return !!this.websiteHostname;
-    }
+  get allowedOrigins(): string[] {
+    const raw = this.config.get<string>('ALLOWED_ORIGINS');
+    const origins = raw
+      ? raw.split(',').map(o => o.trim())
+      : [];
 
-    get serverUrl(): string {
-        const protocol = this.isProduction ? 'https' : 'http';
-        const host = this.websiteHostname ?? `localhost:${this.port}`;
-        return `${protocol}://${host}`;
-    }
+    origins.push('http://localhost:3000');
+
+    return Array.from(new Set(origins));
+  }
+
+  get serverUrl(): string {
+    const protocol = this.isProduction ? 'https' : 'http';
+    const host = this.websiteHostname ?? `localhost:${this.port}`;
+    return `${protocol}://${host}`;
+  }
 }

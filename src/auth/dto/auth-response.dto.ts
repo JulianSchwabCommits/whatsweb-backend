@@ -1,9 +1,11 @@
+export class AuthUserDto {
+  readonly id: string;
+  readonly email: string;
+  readonly username: string;
+  readonly fullName: string;
+}
+
 export class AuthResponseDto {
-    accessToken: string;
-    user: {
-        id: string;
-        email: string;
-        username: string;
-        fullName: string;
-    };
+  readonly accessToken: string;
+  readonly user: AuthUserDto;
 }

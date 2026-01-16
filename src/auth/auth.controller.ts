@@ -7,90 +7,82 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfigService } from '../config/config.service';
-
 @Controller('auth')
 export class AuthController {
-    constructor(
-        private authService: AuthService,
-        private configService: ConfigService,
-    ) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
-    private setRefreshTokenCookie(res: Response, refreshToken: string): void {
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: this.configService.isProduction,
-            sameSite: this.configService.isProduction ? 'none' : 'lax',
-            path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
+  private cookieOptions() {
+    return {
+      httpOnly: true,
+      secure: this.configService.isProduction,
+      sameSite: this.configService.isProduction ? 'none' : 'lax',
+      path: '/',
+    } as const;
+  }
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
+    const { accessToken, refreshToken, user } =
+      await this.authService.register(dto);
+
+    res.cookie('refreshToken', refreshToken, {
+      ...this.cookieOptions(),
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return { accessToken, user };
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
+    const { accessToken, refreshToken, user } =
+      await this.authService.login(dto);
+
+    res.cookie('refreshToken', refreshToken, {
+      ...this.cookieOptions(),
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return { accessToken, user };
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Req() req: Request,
+  ): Promise<{ accessToken: string }> {
+    const refreshToken = (req as any).cookies?.refreshToken;
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token not found');
     }
 
-    private clearRefreshTokenCookie(res: Response): void {
-        res.clearCookie('refreshToken', {
-            httpOnly: true,
-            secure: this.configService.isProduction,
-            sameSite: this.configService.isProduction ? 'none' : 'lax',
-            path: '/',
-        });
-    }
+    return this.authService.refreshToken(refreshToken);
+  }
 
-    @Post('register')
-    @HttpCode(HttpStatus.CREATED)
-    async register(
-        @Body() registerDto: RegisterDto,
-        @Res({ passthrough: true }) res: Response,
-    ): Promise<AuthResponseDto> {
-        const { accessToken, refreshToken, user } = await this.authService.register(registerDto);
-        
-        this.setRefreshTokenCookie(res, refreshToken);
-        
-        return { accessToken, user };
-    }
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout(@Res({ passthrough: true }) res: Response) {
+    await this.authService.logout();
+    res.clearCookie('refreshToken', this.cookieOptions());
+    return { message: 'Logged out successfully' };
+  }
 
-    @Post('login')
-    @HttpCode(HttpStatus.OK)
-    async login(
-        @Body() loginDto: LoginDto,
-        @Res({ passthrough: true }) res: Response,
-    ): Promise<AuthResponseDto> {
-        const { accessToken, refreshToken, user } = await this.authService.login(loginDto);
-        
-        this.setRefreshTokenCookie(res, refreshToken);
-        
-        return { accessToken, user };
-    }
-
-    @Post('refresh')
-    @HttpCode(HttpStatus.OK)
-    async refresh(
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
-    ): Promise<{ accessToken: string }> {
-        const refreshToken = (req as any).cookies?.refreshToken;
-        
-        if (!refreshToken) {
-            throw new UnauthorizedException('Refresh token not found');
-        }
-        
-        return this.authService.refreshToken(refreshToken);
-    }
-
-    @Post('logout')
-    @UseGuards(JwtAuthGuard)
-    @HttpCode(HttpStatus.OK)
-    async logout(
-        @Res({ passthrough: true }) res: Response,
-    ): Promise<{ message: string }> {
-        await this.authService.logout();
-        
-        this.clearRefreshTokenCookie(res);
-        
-        return { message: 'Logged out successfully' };
-    }
-
-    @Get('me')
-    @UseGuards(JwtAuthGuard)
-    async getProfile(@CurrentUser() user: any) {
-        return this.authService.validateUser(user.id);
-    }
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser('id') userId: string) {
+    return this.authService.validateUser(userId);
+  }
 }

@@ -5,19 +5,19 @@ import { ChatGateway } from './chat-gateway.gateway';
 import { UserModule } from '../user/user.module';
 
 @Module({
-    imports: [
-        UserModule,
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (cfg: ConfigService) => {
-                const secret = cfg.get<string>('JWT_SECRET');
-                if (!secret) throw new Error('JWT_SECRET must be configured');
-                return { secret };
-            },
-        }),
-    ],
-    providers: [ChatGateway],
-    exports: [ChatGateway],
+  imports: [
+    UserModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET must be configured');
+        return { secret };
+      },
+    }),
+  ],
+  providers: [ChatGateway],
+  exports: [ChatGateway],
 })
 export class ChatGatewayModule {}

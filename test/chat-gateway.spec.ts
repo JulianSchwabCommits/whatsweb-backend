@@ -14,12 +14,15 @@ describe('ChatGateway', () => {
     email: 'test@example.com',
     username: 'testuser',
     fullName: 'Test User',
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 
   const createMockSocket = (id: string, token?: string): Partial<Socket> => ({
     id,
     handshake: {
-      auth: { token: token || 'valid-token' },
+      auth: token !== undefined ? { token } : {},
+      headers: {},
     } as any,
     emit: jest.fn(),
     disconnect: jest.fn(),
@@ -35,7 +38,7 @@ describe('ChatGateway', () => {
         {
           provide: JwtService,
           useValue: {
-            verifyAsync: jest.fn(),
+            verifyAsync: jest.fn().mockResolvedValue(null),
           },
         },
         {
@@ -56,7 +59,7 @@ describe('ChatGateway', () => {
 
   describe('handleConnection', () => {
     it('should authenticate user with valid token', async () => {
-      const mockSocket = createMockSocket('socket-1') as Socket;
+      const mockSocket = createMockSocket('socket-1', 'valid-token') as Socket;
       jwtService.verifyAsync.mockResolvedValue({ sub: 'user-123', username: 'testuser' });
       userService.findById.mockResolvedValue(mockUser);
 

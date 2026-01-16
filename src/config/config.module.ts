@@ -4,13 +4,12 @@ import { ConfigService } from './config.service';
 
 @Global()
 @Module({
-    imports: [
-        NestConfigModule.forRoot({
-            isGlobal: true,
-            envFilePath: '.env',
-        }),
-    ],
-    providers: [ConfigService],
-    exports: [ConfigService],
+  imports: [
+    NestConfigModule.forRoot({
+      isGlobal: true,
+    }),
+  ],
+  providers: [ConfigService],
+  exports: [ConfigService],
 })
-export class ConfigModule { }
+export class ConfigModule {}
